@@ -1,0 +1,21 @@
+{
+  "eventId": "demo-sub-001",
+  "studentRef": "sub_demoAAA111",
+  "course": { "title": "Science 101 (fake)" },
+  "activity": {
+    "title": "Essay: The Water Cycle",
+    "instructions": "Explain the water cycle in your own words. Use at least one real-life example.",
+    "dueAt": "2026-11-28T15:59:00.000Z"
+  },
+  "submission": {
+    "daysLate": 1,
+    "text": "Water evaporates from the sea because the sun heats it. The vapor rises and cools, then condenses into clouds. When the droplets get heavy, they fall as rain or snow. The water flows back to rivers and the sea, and the cycle starts again. For example, a puddle dries up after a rainy day because the water evaporates."
+  },
+  "rubric": {
+    "criteria": [
+      { "id": "crit-0001", "title": "Content accuracy", "maxPoints": 5, "description": "The main steps are correct" },
+      { "id": "crit-0002", "title": "Clarity", "maxPoints": 3, "description": "The writing is clear and organized" },
+      { "id": "crit-0003", "title": "Example", "maxPoints": 2, "description": "A real-life example is given" }
+    ]
+  }
+}

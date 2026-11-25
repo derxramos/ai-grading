@@ -1,0 +1,30 @@
+# Private study notes - never commit these
+private/
+INTERVIEW-STUDY-GUIDE.md
+*study-guide*.md
+
+# Secrets - never commit these
+.env
+.env.*
+*.key
+*.pem
+credentials*.json
+client_secret*.json
+*service-account*.json
+
+# Docker and n8n data
+n8n_data/
+ollama_data/
+qdrant_storage/
+.n8n/
+*.sqlite
+*.sqlite3
+
+# Raw exports (the cleaned files live in workflows/)
+_raw_export/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

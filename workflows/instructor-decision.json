@@ -1,0 +1,776 @@
+{
+  "name": "AI Grading - Instructor Decision and Class Record",
+  "nodes": [
+    {
+      "id": "3c930d1c-20fc-4c85-98eb-8d53c2cfdc0d",
+      "name": "Decision Link Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        160
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gleams-decision",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "d219c986-0427-45b8-afb9-9a6d3cdab3bf"
+    },
+    {
+      "id": "c0868a95-b081-4f1a-9766-dcc19410ad08",
+      "name": "Find Draft For Page",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "l5HxNWfmWnhuRtN1"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token",
+              "condition": "eq",
+              "keyValue": "={{ $json.query?.token || \"none\" }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "24fd33ee-7dcc-42b2-a9bb-6711e8fcdf1d",
+      "name": "Build Confirm Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const q = $('Decision Link Webhook').item.json.query || {};\nconst token = String(q.token || '');\nconst decision = String(q.decision || '').toLowerCase();\nconst row = $json || {};\nconst esc = (v) => String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst page = (title, body, code) => ({\n  json: {\n    http_code: code,\n    html: '<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>' + esc(title) + '</title><style>body{font-family:Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#222}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;text-align:left}button{padding:10px 20px;font-size:16px;cursor:pointer}</style></head><body><h2>' + esc(title) + '</h2>' + body + '</body></html>'\n  }\n});\nif (!row.submission_id) {\n  return page('Link not valid', '<p>This link is not valid or has expired.</p>', 404);\n}\nif (decision !== 'approve' && decision !== 'reject') {\n  return page('Link not valid', '<p>This link does not have a valid decision.</p>', 400);\n}\nif (row.status !== 'draft') {\n  return page('Already handled', '<p>This hand-in is already <b>' + esc(row.status) + '</b>. Nothing was changed.</p>', 200);\n}\nlet rows = [];\ntry { rows = JSON.parse(row.criteria_json || '[]'); } catch (e) { rows = []; }\nconst trs = rows.map((r) => '<tr><td>' + esc(r.title) + '</td><td>' + esc(r.points) + ' / ' + esc(r.max) + '</td><td>' + esc(r.justification) + '</td></tr>').join('');\nconst verb = decision === 'approve' ? 'Approve' : 'Reject';\nconst body = '<p>Please check this draft before you ' + verb.toLowerCase() + ' it.</p>'\n  + '<p><b>Activity:</b> ' + esc(row.activity_title) + '<br><b>Course:</b> ' + esc(row.course_title) + '<br><b>Student ref:</b> ' + esc(row.student_ref) + '<br><b>Days late:</b> ' + esc(row.days_late) + '</p>'\n  + '<table><tr><th>Criterion</th><th>Points</th><th>Reason</th></tr>' + trs + '</table>'\n  + '<p><b>Draft total: ' + esc(row.total) + ' / ' + esc(row.max_total) + '</b></p>'\n  + '<p><b>Feedback draft:</b> ' + esc(row.feedback || '(none)') + '</p>'\n  + '<form method=\"POST\" action=\"/webhook/gleams-decide\"><input type=\"hidden\" name=\"token\" value=\"' + esc(token) + '\"><input type=\"hidden\" name=\"decision\" value=\"' + esc(decision) + '\"><button type=\"submit\">Confirm: ' + verb + '</button></form>'\n  + '<p><small>Nothing is saved to the class record until you press the button.</small></p>';\nreturn page(verb + ' this draft?', body, 200);"
+      }
+    },
+    {
+      "id": "43e09144-299a-45db-a479-1c56e96b1023",
+      "name": "Reply Confirm Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1080,
+        160
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.http_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "88c9fe8f-3bd9-4594-a729-8e8ff84fa696",
+      "name": "Decision Submit Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        560
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gleams-decide",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "d880194b-6958-42d1-83c6-c8abff83900c"
+    },
+    {
+      "id": "e1f2c39c-1b30-465d-a923-aa62a34663d0",
+      "name": "Read Decision",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        520,
+        560
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "token",
+              "value": "={{ ($json.body?.token ?? \"\").toString().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "decision",
+              "value": "={{ ($json.body?.decision ?? \"\").toString().trim().toLowerCase() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c83b8f74-4712-4f16-b873-d719e666cb60",
+      "name": "Find Draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        560
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "l5HxNWfmWnhuRtN1"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token",
+              "condition": "eq",
+              "keyValue": "={{ $json.token || \"none\" }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "2172793e-9177-4030-b554-e43584f1fc90",
+      "name": "Evaluate Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        560
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const PENALTY_PERCENT_PER_DAY = 10;\nconst req = $('Read Decision').item.json;\nconst row = $json || {};\nconst esc = (v) => String(v === undefined || v === null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst page = (title, body) => '<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>' + esc(title) + '</title><style>body{font-family:Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#222}</style></head><body><h2>' + esc(title) + '</h2>' + body + '</body></html>';\nconst info = (title, text, code) => ({ json: { outcome: 'info', http_code: code, html: page(title, '<p>' + esc(text) + '</p>') } });\nif (!row.submission_id) return info('Link not valid', 'This link is not valid or has expired.', 404);\nif (req.decision !== 'approve' && req.decision !== 'reject') return info('Link not valid', 'The decision must be approve or reject.', 400);\nif (row.status !== 'draft') return info('Already handled', 'This hand-in is already ' + row.status + '. Nothing was changed.', 200);\nconst round2 = (n) => Math.round(n * 100) / 100;\nconst maxTotal = Number(row.max_total) || 0;\nconst aiTotal = Number(row.total) || 0;\nconst daysLate = Math.max(0, Number(row.days_late) || 0);\nconst penalty = round2(Math.min(maxTotal, maxTotal * PENALTY_PERCENT_PER_DAY / 100 * daysLate));\nconst finalScore = round2(Math.max(0, aiTotal - penalty));\nconst decidedAt = new Date().toISOString();\nconst base = {\n  submission_id: row.submission_id,\n  student_ref: row.student_ref,\n  course_title: row.course_title,\n  activity_title: row.activity_title,\n  token: row.token,\n  max_total: maxTotal,\n  ai_total: aiTotal,\n  days_late: daysLate,\n  late_penalty: penalty,\n  final_score: finalScore,\n  criteria_json: row.criteria_json,\n  feedback: row.feedback,\n  decided_at: decidedAt\n};\nif (req.decision === 'approve') {\n  const body = '<p>The grade is saved to the class record.</p><p><b>Student ref:</b> ' + esc(row.student_ref) + '<br><b>AI draft total:</b> ' + aiTotal + ' / ' + maxTotal + '<br><b>Late penalty (' + daysLate + ' day(s) x ' + PENALTY_PERCENT_PER_DAY + '%):</b> -' + penalty + '<br><b>Final score: ' + finalScore + ' / ' + maxTotal + '</b></p>';\n  return { json: Object.assign({ outcome: 'approve', http_code: 200, html: page('Approved', body) }, base) };\n}\nreturn { json: Object.assign({ outcome: 'reject', http_code: 200, html: page('Rejected', '<p>The draft was rejected. Nothing was saved to the class record. Please grade this hand-in yourself.</p>') }, base) };"
+      }
+    },
+    {
+      "id": "5a20e9e1-3c8d-4a48-b33d-626b437a0885",
+      "name": "Route Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1360,
+        560
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "approve"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "reject",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reject"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "info"
+        }
+      }
+    },
+    {
+      "id": "88c74492-1494-468d-82fd-ed0fd2394623",
+      "name": "Mark Draft Approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "l5HxNWfmWnhuRtN1"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token",
+              "condition": "eq",
+              "keyValue": "={{ $json.token }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "decided_at": "={{ $json.decided_at }}"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d2e25b4b-f5d7-4194-9731-e939c1890261",
+      "name": "Save To Class Record",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "RFAg98xoRfoSgdvP"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "submission_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Evaluate Decision\").item.json.submission_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $(\"Evaluate Decision\").item.json.submission_id }}",
+            "student_ref": "={{ $(\"Evaluate Decision\").item.json.student_ref }}",
+            "course_title": "={{ $(\"Evaluate Decision\").item.json.course_title }}",
+            "activity_title": "={{ $(\"Evaluate Decision\").item.json.activity_title }}",
+            "max_total": "={{ $(\"Evaluate Decision\").item.json.max_total }}",
+            "ai_total": "={{ $(\"Evaluate Decision\").item.json.ai_total }}",
+            "days_late": "={{ $(\"Evaluate Decision\").item.json.days_late }}",
+            "late_penalty": "={{ $(\"Evaluate Decision\").item.json.late_penalty }}",
+            "final_score": "={{ $(\"Evaluate Decision\").item.json.final_score }}",
+            "criteria_json": "={{ $(\"Evaluate Decision\").item.json.criteria_json }}",
+            "feedback": "={{ $(\"Evaluate Decision\").item.json.feedback }}",
+            "approved_at": "={{ $(\"Evaluate Decision\").item.json.decided_at }}"
+          },
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "student_ref",
+              "displayName": "student_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "course_title",
+              "displayName": "course_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "activity_title",
+              "displayName": "activity_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "max_total",
+              "displayName": "max_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_total",
+              "displayName": "ai_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "days_late",
+              "displayName": "days_late",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "late_penalty",
+              "displayName": "late_penalty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "final_score",
+              "displayName": "final_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "criteria_json",
+              "displayName": "criteria_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "feedback",
+              "displayName": "feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8cf36da2-0a78-427a-b1dc-fa0a7f862808",
+      "name": "Reply Approved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2200,
+        400
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $(\"Evaluate Decision\").item.json.html }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "aedc2401-11ca-43d5-b235-eb23a19e7448",
+      "name": "Mark Draft Rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "l5HxNWfmWnhuRtN1"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token",
+              "condition": "eq",
+              "keyValue": "={{ $json.token }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected",
+            "decided_at": "={{ $json.decided_at }}"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "77135711-832a-4c38-9092-ad8e1efdd6c3",
+      "name": "Reply Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1920,
+        600
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $(\"Evaluate Decision\").item.json.html }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "e5e2555f-b2a9-4f01-a5ff-6b19419d0835",
+      "name": "Reply Info",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1640,
+        800
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.http_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "dc7d0929-28c9-428b-bc7d-46b6b7c03b37",
+      "name": "Sticky Note b8757f4d",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        208,
+        64
+      ],
+      "parameters": {
+        "content": "## Step A: Confirm page\nThe email link opens this page (GET). It only SHOWS the draft and a Confirm button. Nothing is changed by opening the link, so email scanners that open links cannot approve a grade by mistake.",
+        "color": 4,
+        "width": 1008,
+        "height": 224
+      }
+    },
+    {
+      "id": "89509dab-a683-4ebd-a578-f13eb0a0a1a0",
+      "name": "Sticky Note 842c34d5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        208,
+        304
+      ],
+      "parameters": {
+        "content": "## Step B: Decision (Workflow 2)\nThe Confirm button sends a POST here. The draft must still have status \"draft\", so a second click changes nothing. Approve: the code works out the late penalty (10% of the maximum per late day) and the final score, then saves one row to the class_record table. Reject: only the draft status changes. The AI total is never trusted without the instructor.",
+        "color": 5,
+        "width": 2128,
+        "height": 624
+      }
+    }
+  ],
+  "connections": {
+    "Decision Link Webhook": {
+      "main": [
+        [
+          {
+            "node": "Find Draft For Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Draft For Page": {
+      "main": [
+        [
+          {
+            "node": "Build Confirm Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Confirm Page": {
+      "main": [
+        [
+          {
+            "node": "Reply Confirm Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Submit Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Decision": {
+      "main": [
+        [
+          {
+            "node": "Find Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Draft": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Decision": {
+      "main": [
+        [
+          {
+            "node": "Route Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Outcome": {
+      "main": [
+        [
+          {
+            "node": "Mark Draft Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Draft Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Draft Approved": {
+      "main": [
+        [
+          {
+            "node": "Save To Class Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save To Class Record": {
+      "main": [
+        [
+          {
+            "node": "Reply Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Draft Rejected": {
+      "main": [
+        [
+          {
+            "node": "Reply Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
